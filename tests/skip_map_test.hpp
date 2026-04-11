@@ -44,7 +44,7 @@ bool validate_skipmap(const SkipMap<K,V>& smap, const std::unordered_map<K, V>& 
     std::unordered_map<K, int> seen;
     for (int level = SKIP_LEVELS - 1; level >= 0; level--) {
         std::optional<K> prev;
-        curr = smap.head[level];
+        curr = smap.get_head(level);
         while (curr != nullptr) {
             if (!prev) prev = curr->pair.first;
             else {

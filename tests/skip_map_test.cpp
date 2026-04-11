@@ -152,3 +152,56 @@ TEST(SKIP_MAP, ERASE){
     };
     EXPECT_TRUE(validate_skipmap(skip_map, expected2));
 }
+
+void mixed_test_case1(SkipMap<int,int>& skip_map) {
+    static const query_list<int, int> queries1 = {
+        {QueryType::EMPLACE, 1, 1},
+        {QueryType::EMPLACE, 2, 1},
+        {QueryType::EMPLACE, 3, 1},
+        {QueryType::EMPLACE, 4, 1},
+        {QueryType::EMPLACE, 5, 1},
+        {QueryType::EMPLACE, 6, 1},
+        {QueryType::EMPLACE, 7, 1},
+        {QueryType::EMPLACE, 8, 1},
+    };
+
+    static const query_list<int, int> queries2 = {
+        {QueryType::EMPLACE, 1, 2},
+        {QueryType::EMPLACE, 2, 2},
+        {QueryType::EMPLACE, 3, 2},
+        {QueryType::EMPLACE, 8, 2},
+    };
+
+    static const query_list<int, int> queries3 = {
+        {QueryType::ERASE, 2},
+        {QueryType::ERASE, 3},
+        {QueryType::ERASE, 1},
+        {QueryType::ERASE, 5},
+        {QueryType::ERASE, 3},
+    };
+
+    static const query_list<int, int> queries4 = {
+        {QueryType::ERASE, 3},
+        {QueryType::ERASE, 5},
+        {QueryType::ERASE, 8},
+        {QueryType::ERASE, 6},
+    };
+
+    std::thread t1(run_queries<int, int>, std::ref(skip_map), std::ref(queries1));
+    std::thread t2(run_queries<int, int>, std::ref(skip_map), std::ref(queries2));
+    std::thread t3(run_queries<int, int>, std::ref(skip_map), std::ref(queries3));
+    std::thread t4(run_queries<int, int>, std::ref(skip_map), std::ref(queries4));
+
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+}
+
+
+TEST(SKIP_MAP, MIXED){
+    SkipMap<int, int> skip_map;
+
+    mixed_test_case1(skip_map);
+    EXPECT_TRUE(validate_skipmap(skip_map, {}));
+}
