@@ -2,7 +2,10 @@
 #include <unordered_map>
 
 enum class QueryType {
-    INSERT, DELETE, GET, CONTAINS
+    EMPLACE, 
+    ERASE, 
+    GET, 
+    CONTAINS
 };
 
 template <typename K, typename V>
@@ -19,11 +22,11 @@ template<typename K, typename V>
 void run_queries(SkipMap<K,V>& smap, const query_list<K,V>& list){
     for (auto& q : list) {
         switch (q.type) {
-            case QueryType::INSERT :{
+            case QueryType::EMPLACE :{
                 smap.emplace(q.key, q.value);
                 break;
             }
-            case QueryType::DELETE :{
+            case QueryType::ERASE :{
                 smap.erase(q.key);
                 break;
             }
@@ -54,18 +57,17 @@ bool validate_skipmap(const SkipMap<K,V>& smap, const std::unordered_map<K, V> e
             seen[curr->pair.first]++; // incr count
 
             if (level == 0) { 
-                 // occupies different number of levels than assigned
                 const K& key = curr->pair.first;
                 if (seen[key] != curr->level){
                     std::cout << "level violation" << std::endl;
                     return false;
                 }
                 if (!expected.contains(key)){
-                    std::cout << "unexpected key" << std::endl;
+                    std::cout << "unexpected key " << key << std::endl;
                     return false;
                 }
                 if (expected.at(key) != curr->pair.second){
-                    std::cout << "unexpected value" << std::endl;
+                    std::cout << "unexpected value " << curr->pair.second << std::endl;
                     return false;
                 }
             }

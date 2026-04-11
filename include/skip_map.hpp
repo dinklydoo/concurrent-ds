@@ -57,7 +57,7 @@ struct SkipMap {
     void print();
 
 
-    // custom input iterator
+    // TODO : test this LMAO
     struct iterator {
         using self_type = iterator;
         using value_type = std::pair<K,V>;
@@ -150,7 +150,8 @@ V SkipMap<K,V>::get(const K& key) const {
     throw std::out_of_range("key does not exist in skip-list");
 }
 
-// TODO : clean this up + ensure correctness with erase as an operation
+// TODO : REFACTOR WITH NORMAL POINTER TO REDUCE RC OVERHEAD
+
 template<typename K, typename V>
 void SkipMap<K,V>::emplace(const K& key, const V& value) {
     thread_local std::random_device rd;
@@ -182,7 +183,7 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
         while (next != nullptr) {
             std::unique_lock<std::mutex> next_lock(next->lock);
 
-            K& next_key = (next->pair).first;
+            const K& next_key = (next->pair).first;
 
             if (next_key < key){
                 curr_lock.unlock();
@@ -222,7 +223,6 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
     curr_lock.unlock();
 }
 
-// TODO : fix this
 template<typename K, typename V>
 void SkipMap<K,V>::erase(const K& key) {
     node_ptr<K,V> curr = nullptr;
@@ -230,39 +230,54 @@ void SkipMap<K,V>::erase(const K& key) {
 
     std::unique_lock<std::mutex> curr_lock(this->head_lock);
 
+    node_ptr<K,V> erased = nullptr;
+    std::unique_lock<std::mutex> erase_lock;
+    
     for (int level = SKIP_LEVELS - 1; level >= 0; level--){
-        
+        if (curr == nullptr){
+            next = this->head[level];
+        }
         while (next != nullptr) {
-            std::unique_lock<std::mutex> next_lock(next->lock);
-            K& next_key = (next->pair).first;
+            std::unique_lock<std::mutex> next_lock;
+            if (next != erased) { // don't contend the lock
+                next_lock = std::unique_lock<std::mutex>(next->lock);
+            }
 
-            if (next_key < key){
+            const K& next_key = (next->pair).first;
+
+            if (next_key < key){ // keep searching
                 curr_lock.unlock();
-                std::swap(next_lock, curr_lock); // hand over hand locking
+                curr_lock = std::move(next_lock);
                 curr = next;
                 next = curr->succ[level];
+                continue;
             }
-            else if (next_key == key){
-                if (curr == nullptr) { // head is the erased node
-                    this->head[level] = nullptr;
-                    if (level > 0) next = this->head[level - 1];
+            
+            if (next_key == key){
+                if (erased == nullptr){
+                    erased = next;
+                    erase_lock = std::move(next_lock);
                 }
-                else {
-                    curr->succ[level] = next->succ[level];
-                    next->succ[level] = nullptr;
-                    next_lock.unlock();
-                }
-                break;
+                node_ptr<K,V> nnext = next->succ[level];
+                if (nnext != nullptr) next_lock = std::unique_lock<std::mutex>(nnext->lock);
+
+                if (curr == nullptr) this->head[level] = nnext;
+                else curr->succ[level] = nnext;
             }
-            else {
-                next_lock.unlock();
-                break; // drop a level
-            }
+            if (next_lock.owns_lock()) next_lock.unlock();
+            break;
+        }
+        if (level > 0){
+            if (curr == nullptr) next = this->head[level-1];
+            else next = curr->succ[level-1];
         }
     }
+
     curr_lock.unlock();
+    if (erase_lock.owns_lock()) erase_lock.unlock(); // erase dne
 }
 
+// TODO : make this nicer
 template<typename K, typename V>
 void SkipMap<K,V>::print() {
     node_ptr<K,V> curr;
