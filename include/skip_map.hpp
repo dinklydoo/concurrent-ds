@@ -150,6 +150,7 @@ V SkipMap<K,V>::get(const K& key) const {
     throw std::out_of_range("key does not exist in skip-list");
 }
 
+// TODO : clean this up + ensure correctness with erase as an operation
 template<typename K, typename V>
 void SkipMap<K,V>::emplace(const K& key, const V& value) {
     thread_local std::random_device rd;
@@ -213,12 +214,15 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
                 if (rand_level - 1 >= level) curr->succ[level] = node; // append at tail
                 if (level > 0) next = curr->succ[level-1];
             }
-            else next = this->head[level-1];
+            else {
+                if (level > 0) next = this->head[level-1];
+            }
         }
     }
     curr_lock.unlock();
 }
 
+// TODO : fix this
 template<typename K, typename V>
 void SkipMap<K,V>::erase(const K& key) {
     node_ptr<K,V> curr = nullptr;

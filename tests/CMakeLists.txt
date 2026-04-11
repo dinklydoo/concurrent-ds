@@ -10,4 +10,4 @@ target_link_libraries(tests
 )
 
 include(GoogleTest)
-#gtest_discover_tests(tests)
+gtest_discover_tests(tests)
