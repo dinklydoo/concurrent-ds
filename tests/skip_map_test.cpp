@@ -100,6 +100,42 @@ void erase_test_case1(SkipMap<int,int>& skip_map) {
     run_queries(skip_map, queries2);
 }
 
+void erase_test_case2(SkipMap<int,int>& skip_map) {
+    static const query_list<int, int> queries1 = {
+        {QueryType::EMPLACE, 1, 1},
+        {QueryType::EMPLACE, 2, 1},
+        {QueryType::EMPLACE, 3, 1},
+        {QueryType::EMPLACE, 4, 1},
+        {QueryType::EMPLACE, 5, 1},
+        {QueryType::EMPLACE, 6, 1},
+        {QueryType::EMPLACE, 7, 1},
+        {QueryType::EMPLACE, 8, 1},
+    };
+
+    static const query_list<int, int> queries2 = {
+        {QueryType::ERASE, 2},
+        {QueryType::ERASE, 3},
+        {QueryType::ERASE, 1},
+        {QueryType::ERASE, 5},
+        {QueryType::ERASE, 3},
+    };
+
+    static const query_list<int, int> queries3 = {
+        {QueryType::ERASE, 3},
+        {QueryType::ERASE, 5},
+        {QueryType::ERASE, 8},
+        {QueryType::ERASE, 6},
+    };
+    // populate skip map
+    run_queries(skip_map, queries1);
+    
+    std::thread t1(run_queries<int, int>, std::ref(skip_map), std::ref(queries2));
+    std::thread t2(run_queries<int, int>, std::ref(skip_map), std::ref(queries3));
+
+    t1.join();
+    t2.join();
+}
+
 TEST(SKIP_MAP, ERASE){
     SkipMap<int, int> skip_map;
     
@@ -108,4 +144,11 @@ TEST(SKIP_MAP, ERASE){
         {2, 8}, {4, 7}
     };
     EXPECT_TRUE(validate_skipmap(skip_map, expected1));
+
+    skip_map.clear();
+    erase_test_case2(skip_map);
+    static const std::unordered_map<int, int> expected2 {
+        {4, 1}, {7, 1}
+    };
+    EXPECT_TRUE(validate_skipmap(skip_map, expected2));
 }

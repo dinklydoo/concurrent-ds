@@ -8,14 +8,13 @@
 #include <stdexcept>
 #include <cassert>
 
-
 #define SKIP_LEVELS 4
 
 template<typename K, typename V>
 struct Node;
 
 template<typename K, typename V>
-using node_ptr = std::shared_ptr<Node<K,V>>;
+using node_ptr = Node<K,V>*;
 
 template<typename K, typename V>
 using level_vector = std::vector<node_ptr<K,V>>;
@@ -54,6 +53,7 @@ struct SkipMap {
     V get(const K& key) const;
     void emplace(const K& key, const V& value);
     void erase(const K& key);
+    void clear();
     void print();
 
 
@@ -97,9 +97,6 @@ struct SkipMap {
     iterator end() const { return iterator(nullptr); }
 };
 
-
-
-
 template<typename K, typename V>
 bool SkipMap<K,V>::contains(const K& key) const {
     node_ptr<K,V> curr = nullptr;
@@ -131,7 +128,7 @@ V SkipMap<K,V>::get(const K& key) const {
     node_ptr<K,V> next = this->head[SKIP_LEVELS - 1];
 
     for (int level = SKIP_LEVELS - 1; level >= 0; level--){
-        next = (curr == nullptr)? this->head[level] : curr.get_succ(level);
+        next = (curr == nullptr)? this->head[level] : curr->get_succ(level);
         while (next != nullptr) {
             K& next_key = (next->pair).first;
 
@@ -163,7 +160,7 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
         rand_level++;
         if (rand_level == SKIP_LEVELS) break;
     }
-    node_ptr<K,V> node = std::make_shared<Node<K,V>>(key, value, rand_level);
+    node_ptr<K,V> node = new Node<K,V>(key, value, rand_level);
     if (contains(key)){
         node = nullptr;
         rand_level = 0;
@@ -272,9 +269,25 @@ void SkipMap<K,V>::erase(const K& key) {
             else next = curr->succ[level-1];
         }
     }
+    if (erased != nullptr) delete erased; // free memory
 
     curr_lock.unlock();
     if (erase_lock.owns_lock()) erase_lock.unlock(); // erase dne
+}
+
+template<typename K, typename V>
+void SkipMap<K,V>::clear() {
+    for (int level = SKIP_LEVELS - 1; level >= 0; level--){
+        if (level == 0) {
+            node_ptr<K,V> curr = this->head[0];
+            while (curr != nullptr) {
+                node_ptr<K,V> temp = curr;
+                curr = curr->succ[0];
+                delete temp;
+            }
+        }
+        this->head[level] = nullptr;
+    }
 }
 
 // TODO : make this nicer

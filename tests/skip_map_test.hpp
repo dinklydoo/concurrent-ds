@@ -38,7 +38,7 @@ void run_queries(SkipMap<K,V>& smap, const query_list<K,V>& list){
 }
 
 template<typename K, typename V>
-bool validate_skipmap(const SkipMap<K,V>& smap, const std::unordered_map<K, V> expected) {
+bool validate_skipmap(const SkipMap<K,V>& smap, const std::unordered_map<K, V>& expected) {
     node_ptr<K, V> curr = nullptr;
     // validate ordering and level consistency
     std::unordered_map<K, int> seen;
@@ -62,13 +62,15 @@ bool validate_skipmap(const SkipMap<K,V>& smap, const std::unordered_map<K, V> e
                     std::cout << "level violation" << std::endl;
                     return false;
                 }
-                if (!expected.contains(key)){
-                    std::cout << "unexpected key " << key << std::endl;
-                    return false;
-                }
-                if (expected.at(key) != curr->pair.second){
-                    std::cout << "unexpected value " << curr->pair.second << std::endl;
-                    return false;
+                if (!expected.empty()){
+                    if (!expected.contains(key)){
+                        std::cout << "unexpected key " << key << std::endl;
+                        return false;
+                    }
+                    if (expected.at(key) != curr->pair.second){
+                        std::cout << "unexpected value " << curr->pair.second << std::endl;
+                        return false;
+                    }
                 }
             }
             curr = curr->succ[level];
