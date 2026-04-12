@@ -157,18 +157,18 @@ void mixed_test_case1(SkipMap<int,int>& skip_map) {
     static const query_list<int, int> queries1 = {
         {QueryType::EMPLACE, 1, 1},
         {QueryType::EMPLACE, 2, 1},
-        {QueryType::EMPLACE, 3, 1},
-        {QueryType::EMPLACE, 4, 1},
-        {QueryType::EMPLACE, 5, 1},
+        {QueryType::EMPLACE, 2, 2},
+        {QueryType::EMPLACE, 2, 3},
+        {QueryType::EMPLACE, 2, 4},
         {QueryType::EMPLACE, 6, 1},
         {QueryType::EMPLACE, 7, 1},
         {QueryType::EMPLACE, 8, 1},
     };
 
     static const query_list<int, int> queries2 = {
-        {QueryType::EMPLACE, 1, 2},
-        {QueryType::EMPLACE, 2, 2},
-        {QueryType::EMPLACE, 3, 2},
+        {QueryType::EMPLACE, 2, 5},
+        {QueryType::EMPLACE, 2, 6},
+        {QueryType::EMPLACE, 3, 1},
         {QueryType::EMPLACE, 8, 2},
     };
 
@@ -198,10 +198,12 @@ void mixed_test_case1(SkipMap<int,int>& skip_map) {
     t4.join();
 }
 
-
 TEST(SKIP_MAP, MIXED){
     SkipMap<int, int> skip_map;
 
-    mixed_test_case1(skip_map);
+    mixed_test_case1(skip_map); // nvm some deadlock
+
+    skip_map.print();
+
     EXPECT_TRUE(validate_skipmap(skip_map, {}));
 }

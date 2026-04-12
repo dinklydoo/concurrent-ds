@@ -1,6 +1,7 @@
 #pragma once
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <iostream>
 #include <ostream>
@@ -122,7 +123,7 @@ public:
     iterator end() const { return iterator(nullptr); }
 };
 
-
+// TODO : locking on contains and gets
 
 template<typename K, typename V>
 bool SkipMap<K,V>::contains(const K& key) const {
@@ -186,63 +187,66 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
         if (rand_level == SKIP_LEVELS) break;
     }
     node_ptr<K,V> node = new Node<K,V>(key, value, rand_level);
-    if (contains(key)){
-        node = nullptr;
-        rand_level = 0;
-    }
+
+    // keep a running track of prior and successor nodes
+    level_vector<K,V> pred;
+    level_vector<K,V> succ;
+
+    std::unordered_set<node_ptr<K,V>> owned; // -- worst case search O(2 * rand_level)
+
     node_ptr<K,V> curr = nullptr;
     node_ptr<K,V> next = this->head[SKIP_LEVELS - 1];
     
     std::unique_lock<std::mutex> curr_lock(this->head_lock);
 
     for (int level = SKIP_LEVELS - 1; level >= 0; level--){
-        if (curr == nullptr && next == nullptr) { // empty layer
-            if (rand_level - 1 >= level){
-                this->head[level] = node;
-            }
-            else next = this->head[level];
-        }
         while (next != nullptr) {
-            std::unique_lock<std::mutex> next_lock(next->lock);
+            int prior = SKIP_LEVELS - level - 2; // prior index in pred and succ lists
+
+            std::unique_lock<std::mutex> next_lock;
+            if ( owned.contains(next) ){
+                next_lock = std::unique_lock<std::mutex>(next->lock);
+            }
 
             const K& next_key = (next->pair).first;
 
             if (next_key < key){
-                curr_lock.unlock();
+                if ( !owned.contains(curr) ){
+                    curr_lock.unlock();
+                }
                 curr_lock = std::move(next_lock); // hand over hand locking
                 curr = next;
                 next = curr->succ[level];
             }
-            else if (next_key == key){
+            else if (next_key == key){ // exists -> change value
                 (next->pair).second = value;
-                curr_lock.unlock();
-                next_lock.unlock();
+                for (node_ptr<K,V> node : owned) node->lock.unlock();
                 return;
             }
-            else {
-                if (rand_level-1 >= level) {
-                    if (curr != nullptr) curr->succ[level] = node;
-                    else this->head[level] = node;
-                    node->succ[level] = next;
-                }
-                next_lock.unlock();
-                if (level > 0){
-                    next = (curr == nullptr)? this->head[level-1] : curr->succ[level-1];
-                }
-                break; // drop a level -> next will be non-null!!
-            }
+            else break; // next > target
         }
-        if (next == nullptr) {
-            if (curr != nullptr){
-                if (rand_level - 1 >= level) curr->succ[level] = node; // append at tail
-                if (level > 0) next = curr->succ[level-1];
-            }
-            else {
-                if (level > 0) next = this->head[level-1];
-            }
+        if (rand_level - 1 >= level){
+            pred.push_back(curr);
+            succ.push_back(next);
+
+            if (curr != nullptr) owned.insert(curr);
+            if (next != nullptr) owned.insert(next);
+        }
+        if (level > 0){
+            next = (curr == nullptr)? this->head[level-1] : curr->succ[level-1];
         }
     }
-    curr_lock.unlock();
+    // full-update into unlock
+    for (int level = rand_level - 1; level >= 0; level--){
+        int index = rand_level - 1 - level;
+        if (pred[index] != nullptr) {
+            pred[index]->succ[level] = node;
+        }
+        if (succ[index] != nullptr) {
+            node->succ[level] = succ[index];
+        }
+    }
+    for (node_ptr<K,V> node : owned) node->lock.unlock();
 }
 
 template<typename K, typename V>
@@ -323,7 +327,7 @@ void SkipMap<K,V>::print() {
         curr = this->head[level];
 
         while (curr != nullptr ){
-            std::cout << (curr->pair).first << ' ';
+            std::cout << (curr->pair).first << ':' << (curr->pair).second << ' ';
             curr = curr->succ[level];
         }
         std::cout << '\n';

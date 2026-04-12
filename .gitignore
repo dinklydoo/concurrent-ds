@@ -42,5 +42,6 @@
 
 .clangd
 /build/
+/log/
 .cache
 .vscode
