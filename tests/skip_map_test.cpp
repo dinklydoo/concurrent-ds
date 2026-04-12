@@ -201,8 +201,7 @@ void mixed_test_case1(SkipMap<int,int>& skip_map) {
 TEST(SKIP_MAP, MIXED){
     SkipMap<int, int> skip_map;
 
-    mixed_test_case1(skip_map); // nvm some deadlock
-
+    mixed_test_case1(skip_map);
     skip_map.print();
 
     EXPECT_TRUE(validate_skipmap(skip_map, {}));

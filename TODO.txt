@@ -1,0 +1,11 @@
+probably completely rebuild skip map properly using search -> validation
+
+learn lock free ds
+
+build lock free skip map + benchmark
+
+FUTURE DS:
+
+- lock free variants of all standard ds
+
+- elimination stack

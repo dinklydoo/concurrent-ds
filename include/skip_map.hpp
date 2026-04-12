@@ -189,22 +189,20 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
     node_ptr<K,V> node = new Node<K,V>(key, value, rand_level);
 
     // keep a running track of prior and successor nodes
-    level_vector<K,V> pred;
-    level_vector<K,V> succ;
+    level_vector<K,V> pred(rand_level, nullptr);
+    level_vector<K,V> succ(rand_level, nullptr);
 
     std::unordered_set<node_ptr<K,V>> owned; // -- worst case search O(2 * rand_level)
 
+    std::unique_lock<std::mutex> curr_lock(this->head_lock);
+
     node_ptr<K,V> curr = nullptr;
     node_ptr<K,V> next = this->head[SKIP_LEVELS - 1];
-    
-    std::unique_lock<std::mutex> curr_lock(this->head_lock);
 
     for (int level = SKIP_LEVELS - 1; level >= 0; level--){
         while (next != nullptr) {
-            int prior = SKIP_LEVELS - level - 2; // prior index in pred and succ lists
-
             std::unique_lock<std::mutex> next_lock;
-            if ( owned.contains(next) ){
+            if ( !owned.contains(next) ){ // we already own the lock
                 next_lock = std::unique_lock<std::mutex>(next->lock);
             }
 
@@ -212,24 +210,31 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
 
             if (next_key < key){
                 if ( !owned.contains(curr) ){
-                    curr_lock.unlock();
+                    if (curr_lock.owns_lock()) curr_lock.unlock();
                 }
+                // bug here curr_lock move assignment unlocks curr lock ^^
                 curr_lock = std::move(next_lock); // hand over hand locking
                 curr = next;
                 next = curr->succ[level];
             }
             else if (next_key == key){ // exists -> change value
                 (next->pair).second = value;
-                for (node_ptr<K,V> node : owned) node->lock.unlock();
-                return;
+                for (node_ptr<K,V> node : owned){
+                    if (node == nullptr) this->head_lock.unlock();
+                    else node->lock.unlock();
+                }
+                if (curr_lock.owns_lock()) curr_lock.unlock();
+
+                delete node;
+                return; 
             }
             else break; // next > target
         }
         if (rand_level - 1 >= level){
-            pred.push_back(curr);
-            succ.push_back(next);
+            pred[level] = curr;
+            succ[level] = next;
 
-            if (curr != nullptr) owned.insert(curr);
+            owned.insert(curr);
             if (next != nullptr) owned.insert(next);
         }
         if (level > 0){
@@ -238,23 +243,27 @@ void SkipMap<K,V>::emplace(const K& key, const V& value) {
     }
     // full-update into unlock
     for (int level = rand_level - 1; level >= 0; level--){
-        int index = rand_level - 1 - level;
-        if (pred[index] != nullptr) {
-            pred[index]->succ[level] = node;
+        if (pred[level] != nullptr) {
+            pred[level]->succ[level] = node;
         }
-        if (succ[index] != nullptr) {
-            node->succ[level] = succ[index];
+        else {
+            this->head[level] = node;
         }
+        node->succ[level] = succ[level];
     }
-    for (node_ptr<K,V> node : owned) node->lock.unlock();
+    for (node_ptr<K,V> node : owned){
+        if (node == nullptr) this->head_lock.unlock();
+        else node->lock.unlock();
+    }
+    if (curr_lock.owns_lock()) curr_lock.unlock();
 }
 
 template<typename K, typename V>
 void SkipMap<K,V>::erase(const K& key) {
-    node_ptr<K,V> curr = nullptr;
-    node_ptr<K,V> next = this->head[SKIP_LEVELS - 1];
 
     std::unique_lock<std::mutex> curr_lock(this->head_lock);
+    node_ptr<K,V> curr = nullptr;
+    node_ptr<K,V> next = this->head[SKIP_LEVELS - 1];
 
     node_ptr<K,V> erased = nullptr;
     std::unique_lock<std::mutex> erase_lock;
