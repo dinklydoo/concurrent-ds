@@ -13,8 +13,9 @@ enable_testing()
 include_directories("include/")
 
 add_executable(tests
-    tests/skip_map_test.cpp
+    tests/set_test.cpp
 )
+#tests/skip_map_test.cpp
 
 target_link_libraries(tests
     PRIVATE

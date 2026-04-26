@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -27,10 +28,19 @@ struct Node {
 
     const int level;
     level_vector<K, V> succ;
+
+    std::atomic_bool marked;
+    std::atomic_bool linked;
+
     Node(const K& key, const V& value, const int level) : 
         pair(std::pair(key, value)), 
         level(level), 
-        succ(level_vector<K,V>(level, nullptr)) {}
+        succ(level_vector<K,V>(level, nullptr)),
+        marked(false),
+        linked(true)
+        
+        
+        {}
     ~Node() = default;
 
     node_ptr<K,V> get_succ(int l) {
