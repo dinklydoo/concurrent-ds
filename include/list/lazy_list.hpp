@@ -27,23 +27,25 @@ private:
 
         inline bool has_next(const T& nval) {
             // dont need to use atomics here
-            uint8_t snapshot = flag.load(std::memory_order_acquire);
+            uint8_t snapshot = flag.load(std::memory_order_relaxed);
 
             if (snapshot & TAIL_SENTINEL) return false;
             return (val < nval);
         }
 
         inline bool equals(const T& elem) {
-            if (flag.load(std::memory_order_acquire) & TAIL_SENTINEL) return false;
+            if (flag.load(std::memory_order_relaxed) & TAIL_SENTINEL) return false;
             return val == elem;
         }
     };
     
     inline bool validate(lazy_node* pred, lazy_node* curr){
-        uint8_t pflag = pred->flag.load(std::memory_order_acquire);
-        uint8_t cflag = curr->flag.load(std::memory_order_acquire);
+        // use relaxed ordering here --> we can assert validate is only called in locked portions
 
-        return !(pflag & MARKED) && !(cflag & MARKED) && pred->next.load(std::memory_order_acquire) == curr;
+        uint8_t pflag = pred->flag.load(std::memory_order_relaxed);
+        uint8_t cflag = curr->flag.load(std::memory_order_relaxed);
+
+        return !(pflag & MARKED) && !(cflag & MARKED) && pred->next.load(std::memory_order_relaxed) == curr;
     }
 
     mutable RCU<lazy_node> rcu;
@@ -80,7 +82,7 @@ bool lazy_list<T>::contains(const T& elem) const {
         curr = curr->next.load(std::memory_order_acquire);
     }
 
-    bool res = (curr->equals(elem)) && !(curr->flag.load(std::memory_order_acquire) & MARKED);
+    bool res = (curr->equals(elem)) && !(curr->flag.load(std::memory_order_relaxed) & MARKED);
     rcu.exit();
     return res;
 }
@@ -109,8 +111,8 @@ void lazy_list<T>::insert(const T& elem) {
             
             // add node to list
             lazy_node* node = new lazy_node(elem);
-            node->next.store(curr, std::memory_order_release);
-            pred->next.store(node, std::memory_order_release);
+            node->next.store(curr, std::memory_order_relaxed); // <-- relax here, node is not yet attached to the system
+            pred->next.store(node, std::memory_order_release); // <-- only way to access "node", once we acquire load this; state of node next is visible
             break;
         }
     }
@@ -137,8 +139,8 @@ void lazy_list<T>::erase(const T& elem) {
         // phase 3 : locks acquired, validate list state
         if (validate(pred, curr)){
             if (curr->equals(elem)){
-                curr->flag.fetch_or(MARKED, std::memory_order_acq_rel);
-                pred->next.store(curr->next.load(std::memory_order_acquire), std::memory_order_release);
+                curr->flag.fetch_or(MARKED, std::memory_order_relaxed);
+                pred->next.store(curr->next.load(std::memory_order_relaxed), std::memory_order_relaxed); // <-- 
                 rcu.retire(curr);
             }
             break;

@@ -54,14 +54,11 @@ public:
 
 template<typename node_T>
 void RCU<node_T>::epoch_counter() {
-    std::atomic_uint64_t rc{0};
-
     while (active.load(std::memory_order_acquire)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(EPOCH_FREQ));
         global_epoch.fetch_add(1, std::memory_order_acq_rel);
-        rc.fetch_add(1, std::memory_order_acq_rel);
 
-        if (rc.load(std::memory_order_acquire) % RECLAIM_FREQ == 0) reclaim();
+        if (global_epoch.load(std::memory_order_acquire) % RECLAIM_FREQ == 0) reclaim();
     }
 }
 
@@ -72,8 +69,8 @@ thread_epoch* RCU<node_T>::thread_store() {
         thread_state = new thread_epoch();
         thread_state->epoch_count.store(
             global_epoch.load(std::memory_order_acquire), 
-            std::memory_order_release);
-        thread_state->active.store(false);
+            std::memory_order_relaxed); // <-- initialization should be relaxed
+        thread_state->active.store(false, std::memory_order::relaxed);
 
         std::lock_guard<std::mutex> lock(reg_lock);
         registry.push_back(thread_state);
@@ -86,7 +83,7 @@ void RCU<node_T>::enter() {
     thread_epoch* thread_state = thread_store();
     thread_state->epoch_count.store(
         global_epoch.load(std::memory_order_acquire),
-        std::memory_order_release
+        std::memory_order_relaxed // <-- read of epoch occurs only after read of active, sync on active
     );
     thread_state->active.store(true, std::memory_order_release);
 }
@@ -99,7 +96,6 @@ void RCU<node_T>::exit() {
 
 template<typename node_T>
 void RCU<node_T>::retire(node_T* node){
-    static std::atomic_uint32_t rc{0};
     uint64_t epoch = global_epoch.load(std::memory_order_acquire);
 
     std::lock_guard<std::mutex> lock(ret_lock);
@@ -114,7 +110,7 @@ void RCU<node_T>::reclaim(){
     uint64_t youngest = UINT64_MAX;
     for (auto it = registry.begin(); it != registry.end(); it++){
         if ((*it)->active.load(std::memory_order_acquire)){
-            youngest = std::min(youngest, (*it)->epoch_count.load(std::memory_order_acquire));
+            youngest = std::min(youngest, (*it)->epoch_count.load(std::memory_order_relaxed));
         }
     }
 
